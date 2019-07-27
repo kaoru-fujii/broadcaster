@@ -1,0 +1,197 @@
+package com.example.broadcaster;
+
+import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.le.AdvertiseCallback;
+import android.bluetooth.le.AdvertiseData;
+import android.bluetooth.le.AdvertiseSettings;
+import android.bluetooth.le.BluetoothLeAdvertiser;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
+import android.os.ParcelUuid;
+import android.support.v7.app.AppCompatActivity;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.UUID;
+
+public class MainActivity extends AppCompatActivity
+{
+    // 定数
+    private static final int    REQUEST_ENABLEBLUETOOTH = 1; // Bluetooth機能の有効化要求時の識別コード
+    // メンバー変数
+    private BluetoothAdapter mBluetoothAdapter;    // BluetoothAdapter : Bluetooth処理で必要
+
+    String uuid  = new String("65432461-1EFE-4ADB-BC7E-9F7F8E27FDC1");
+
+    BluetoothLeAdvertiser advertiser;
+    AdvertiseSettings settings;
+    public AdvertiseData advertiseData;
+    //AdvertiseData.Builder dataBuilder = new AdvertiseData.Builder();
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        // Android端末がBLEをサポートしてるかの確認
+        if( !getPackageManager().hasSystemFeature( PackageManager.FEATURE_BLUETOOTH_LE ) )
+        {
+            Toast.makeText( this, R.string.ble_is_not_supported, Toast.LENGTH_SHORT ).show();
+            finish();    // アプリ終了宣言
+            return;
+        }
+
+        // Bluetoothアダプタの取得
+        BluetoothManager bluetoothManager = (BluetoothManager)getSystemService( Context.BLUETOOTH_SERVICE );
+        mBluetoothAdapter = bluetoothManager.getAdapter();
+        if( null == mBluetoothAdapter )
+        {    // Android端末がBluetoothをサポートしていない
+            Toast.makeText( this, R.string.bluetooth_is_not_supported, Toast.LENGTH_SHORT ).show();
+            finish();    // アプリ終了宣言
+            return;
+        }
+
+        BluetoothManager manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        BluetoothAdapter adapter = manager.getAdapter();
+        advertiser = adapter.getBluetoothLeAdvertiser();
+
+        // 設定
+        AdvertiseSettings.Builder settingBuilder = new AdvertiseSettings.Builder();
+        settingBuilder.setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED);
+        settingBuilder.setConnectable(true);//アドバタイジングの種類を接続か非接続か選択
+        settingBuilder.setTimeout(0);
+        settingBuilder.setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM);
+        settings = settingBuilder.build();
+
+        //** dataBuilder に設定するものを用意↓↓↓
+        AdvertiseData.Builder dataBuilder = new AdvertiseData.Builder();
+
+        // 1 アドバタイジングデータ
+        ParcelUuid mUUID = new ParcelUuid(UUID.fromString(uuid));
+        dataBuilder.addServiceUuid(mUUID);
+
+        //2 ManufacturerSpecificDdata
+        byte[] bytearray = new byte[16];
+        bytearray[0] = 23;
+        bytearray[13] = 13;
+
+        dataBuilder.addManufacturerData(76,bytearray );
+        dataBuilder.setIncludeDeviceName(true);
+       // dataBuilder.addServiceData(new ParcelUuid(UUID.fromString("65")),bytearray); //←なぜか動かなくなってしまう
+
+        //** dataBuilderをAdvertiseDataに格納
+        advertiseData = dataBuilder.build();
+
+        System.out.println("Oncreate      hoge1"+advertiseData);
+
+        /*画面に表示*/
+        ((TextView) findViewById(R.id.uuid)).setText( mUUID.toString() );
+        ((EditText) findViewById(R.id.manudata)).setText( advertiseData.getManufacturerSpecificData().toString() );
+        /*画面に表示*/
+
+
+        //アドバタイズを開始
+//        advertiser.startAdvertising(settings, advertiseData, new AdvertiseCallback() {
+//            @Override
+//            public void onStartSuccess(AdvertiseSettings settingsInEffect) {
+//                super.onStartSuccess(settingsInEffect);
+//            }
+//            @Override
+//            public void onStartFailure(int errorCode) {
+//                super.onStartFailure(errorCode);
+//            }
+//        });
+
+    }
+
+    // 初回表示時、および、ポーズからの復帰時
+    @Override
+    protected void onResume()
+    {
+        super.onResume();
+
+        // Android端末のBluetooth機能の有効化要求
+        requestBluetoothFeature();
+    }
+
+    // Android端末のBluetooth機能の有効化要求
+    private void requestBluetoothFeature()
+    {
+        if( mBluetoothAdapter.isEnabled() )
+        {
+            return;
+        }
+        // デバイスのBluetooth機能が有効になっていないときは、有効化要求（ダイアログ表示）
+        Intent enableBtIntent = new Intent( BluetoothAdapter.ACTION_REQUEST_ENABLE );
+        startActivityForResult( enableBtIntent, REQUEST_ENABLEBLUETOOTH );
+    }
+
+    // 機能の有効化ダイアログの操作結果
+    @Override
+    protected void onActivityResult( int requestCode, int resultCode, Intent data )
+    {
+        switch( requestCode )
+        {
+            case REQUEST_ENABLEBLUETOOTH: // Bluetooth有効化要求
+                if( Activity.RESULT_CANCELED == resultCode )
+                {    // 有効にされなかった
+                    Toast.makeText( this, R.string.bluetooth_is_not_working, Toast.LENGTH_SHORT ).show();
+                    finish();    // アプリ終了宣言
+                    return;
+                }
+                break;
+        }
+        super.onActivityResult( requestCode, resultCode, data );
+    }
+
+    // リストビューのアイテムクリック時の処理
+    public void onButtonClick(View view )
+    {
+        // クリックされたら
+        //アドバタイズを開始
+        advertiser.startAdvertising(settings, advertiseData, new AdvertiseCallback() {
+            @Override
+            public void onStartSuccess(AdvertiseSettings settingsInEffect) {
+                super.onStartSuccess(settingsInEffect);
+                System.out.println("onButtonClick hoge3"+advertiseData);
+            }
+            @Override
+            public void onStartFailure(int errorCode) {
+                super.onStartFailure(errorCode);
+                System.out.println("onButtonClick hoge5"+advertiseData);
+            }
+        });
+    }
+
+
+//    // リストビューのアイテムクリック時の処理
+//    @Override
+//    public void onItemClick(AdapterView<?> parent, View view, int position, long id )
+//    {
+//        System.out.println("onItemClick hoge3"+advertiseData.getManufacturerSpecificData());
+//
+//        // クリックされたら
+//        //アドバタイズを開始
+//        advertiser.startAdvertising(settings, advertiseData, new AdvertiseCallback() {
+//            @Override
+//            public void onStartSuccess(AdvertiseSettings settingsInEffect) {
+//                super.onStartSuccess(settingsInEffect);
+//            }
+//
+//            @Override
+//            public void onStartFailure(int errorCode) {
+//                super.onStartFailure(errorCode);
+//            }
+//        });
+//    }
+
+}
